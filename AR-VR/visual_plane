@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Рухомий Літак</title>
+    <style>
+        body { margin: 0; overflow: hidden; height: 100%; }
+        canvas { display: block; width: 100%; height: 100%; }
+    </style>
+</head>
+<body>
+    <canvas id="glCanvas"></canvas>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gl-matrix/2.8.1/gl-matrix-min.js"></script>
+
+    <script>
+        const vertexShaderSource = `
+        attribute vec4 aPosition;
+        attribute vec4 aColor;
+        uniform mat4 uModelViewMatrix;
+        uniform mat4 uProjectionMatrix;
+        varying lowp vec4 vColor;
+        void main(void) {
+            gl_Position = uProjectionMatrix * uModelViewMatrix * aPosition;
+            vColor = aColor;
+        }`;
+
+        const fragmentShaderSource = `
+        varying lowp vec4 vColor;
+        void main(void) {
+            gl_FragColor = vColor;
+        }`;
+
+        function initWebGL(canvas) {
+            const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+            if (!gl) {
+                alert("WebGL is not supported!");
+                return null;
+            }
+            return gl;
+        }
+
+        function compileShader(gl, source, type) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error("Shader compilation error:", gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+
+        function initShaders(gl) {
+            const vertexShader = compileShader(gl, vertexShaderSource, gl.VERTEX_SHADER);
+            const fragmentShader = compileShader(gl, fragmentShaderSource, gl.FRAGMENT_SHADER);
+
+            const shaderProgram = gl.createProgram();
+            gl.attachShader(shaderProgram, vertexShader);
+            gl.attachShader(shaderProgram, fragmentShader);
+            gl.linkProgram(shaderProgram);
+
+            if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+                console.error("Shader program initialization error:", gl.getProgramInfoLog(shaderProgram));
+                return null;
+            }
+
+            gl.useProgram(shaderProgram);
+            return shaderProgram;
+        }
+
+        // Модель літака з правильним положенням трикутників
+        const airplaneVertices = new Float32Array([
+            // Тіло літака
+            -0.5, 0.0, 0.0,  1.0, 0.0, 0.0,  // Червоний (ліворуч)
+             0.5, 0.0, 0.0,  1.0, 0.0, 0.0,  // Червоний (праворуч)
+             0.0, 0.1, 0.0,  1.0, 0.0, 0.0,  // Червоний (верх)
+
+            // Ліве крило
+            -0.5, 0.0, 0.0, 0.0, 1.0, 0.0,  // Зелений (корінь)
+            0.0, 0.0, 0.3,  0.0, 1.0, 0.0,  // Зелений (кінчик)
+            0.0, 0.1, 0.0,  0.0, 1.0, 0.0,  // Зелений (верх)
+
+            // Праве крило (перевернуте)
+             -0.5, 0.0, 0.0, 0.0, 0.0, 1.0,  // Синій (корінь)
+             0.0, 0.0, -0.3, 0.0, 0.0, 1.0,  // Синій (кінчик)
+             0.0, 0.1, 0.0,  0.0, 0.0, 1.0,  // Синій (верх)
+
+            // Хвіст літака
+             0.45, 0.3, 0.0,  1.0, 1.0, 0.0,  // Жовтий (верх)
+             0.45, 0.0, 0.0,  1.0, 1.0, 0.0   // Жовтий (низ)
+        ]);
+
+        function createBuffer(gl, data) {
+            const buffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+            gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+            return buffer;
+        }
+
+        function drawScene(gl, programInfo, buffers, modelViewMatrix, projectionMatrix) {
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            gl.uniformMatrix4fv(programInfo.uniformLocations.projectionMatrix, false, projectionMatrix);
+            gl.uniformMatrix4fv(programInfo.uniformLocations.modelViewMatrix, false, modelViewMatrix);
+
+            // Літак (тіло, крила та хвіст)
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffers.airplane);
+            gl.vertexAttribPointer(programInfo.attribLocations.position, 3, gl.FLOAT, false, 24, 0);
+            gl.vertexAttribPointer(programInfo.attribLocations.color, 3, gl.FLOAT, false, 24, 12);
+            gl.enableVertexAttribArray(programInfo.attribLocations.position);
+            gl.enableVertexAttribArray(programInfo.attribLocations.color);
+            gl.drawArrays(gl.TRIANGLES, 0, 12);  // Малюємо 12 вершин
+        }
+
+        function initBuffers(gl) {
+            const airplaneBuffer = createBuffer(gl, airplaneVertices);
+            return {
+                airplane: airplaneBuffer
+            };
+        }
+
+        function initMatrices() {
+            const modelViewMatrix = mat4.create();
+            const eye = [0.0, 1.0, 4.0];  // Позиція камери
+            const center = [0.0, 0.0, 0.0];  // Погляд на центр
+            const up = [0.0, 1.0, 0.0];  // Вверх
+            mat4.lookAt(modelViewMatrix, eye, center, up);
+
+            const projectionMatrix = mat4.create();
+            mat4.perspective(projectionMatrix, 45 * Math.PI / 180, 1, 0.1, 100.0);
+
+            return {
+                modelViewMatrix: modelViewMatrix,
+                projectionMatrix: projectionMatrix
+            };
+        }
+
+        function initScene(gl, shaderProgram) {
+            const programInfo = {
+                program: shaderProgram,
+                attribLocations: {
+                    position: gl.getAttribLocation(shaderProgram, 'aPosition'),
+                    color: gl.getAttribLocation(shaderProgram, 'aColor'),
+                },
+                uniformLocations: {
+                    projectionMatrix: gl.getUniformLocation(shaderProgram, 'uProjectionMatrix'),
+                    modelViewMatrix: gl.getUniformLocation(shaderProgram, 'uModelViewMatrix'),
+                }
+            };
+
+            const buffers = initBuffers(gl);
+            const matrices = initMatrices();
+
+            let airplaneRotation = 0.0;
+
+            function render() {
+                airplaneRotation += 0.02;  // Поворот літака
+
+                const airplaneModelMatrix = mat4.create();
+                mat4.rotateY(airplaneModelMatrix, airplaneModelMatrix, airplaneRotation);  // Поворот по осі Y
+
+                // Об'єднуємо модель літака з матрицею перегляду
+                const combinedMatrix = mat4.clone(matrices.modelViewMatrix);
+                mat4.multiply(combinedMatrix, combinedMatrix, airplaneModelMatrix);
+
+                drawScene(gl, programInfo, buffers, combinedMatrix, matrices.projectionMatrix);
+                requestAnimationFrame(render);
+            }
+            render();
+        }
+
+        function main() {
+            const canvas = document.getElementById('glCanvas');
+            const gl = initWebGL(canvas);
+            if (!gl) return;
+
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            gl.enable(gl.DEPTH_TEST);
+
+            const shaderProgram = initShaders(gl);
+            if (shaderProgram) {
+                initScene(gl, shaderProgram);
+            }
+        }
+
+        main();
+    </script>
+</body>
+</html>
