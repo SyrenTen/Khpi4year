@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ландшафт з Будинками</title>
+    <style>
+        body { margin: 0; }
+        canvas { display: block; }
+    </style>
+</head>
+<body>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script>
+        // Створюємо сцену
+        const scene = new THREE.Scene();
+
+        // Створюємо камеру
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+
+        // Створюємо рендерер
+        const renderer = new THREE.WebGLRenderer();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Освітлення
+        const ambientLight = new THREE.AmbientLight(0x404040); // м'яке біле світло
+        scene.add(ambientLight);
+
+        const pointLight = new THREE.PointLight(0xffffff, 1, 100);
+        pointLight.position.set(10, 10, 10);
+        scene.add(pointLight);
+
+        // Матеріали
+        const wallMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513 }); // Коричневий для стін
+        const roofMaterial = new THREE.MeshStandardMaterial({ color: 0x8B0000 }); // Темно-червоний для даху
+
+        // Функція для створення будинку
+        function createHouse(x, z, rotationY) {
+            // Створюємо корпус будинку (BoxGeometry)
+            const houseBodyGeometry = new THREE.BoxGeometry(4, 4, 4); // Ширина, висота, глибина
+            const houseBody = new THREE.Mesh(houseBodyGeometry, wallMaterial);
+            houseBody.position.set(x, 2, z); // Встановлюємо позицію будинку
+            houseBody.rotation.y = rotationY;
+            scene.add(houseBody);
+
+            // Створюємо дах (ConeGeometry)
+            const roofGeometry = new THREE.ConeGeometry(3.2, 2, 4); // Діаметр основи, висота, кількість сегментів
+            const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+            roof.position.set(x, 5, z); // Встановлюємо позицію даху
+            roof.rotation.set(0, Math.PI / 4 + rotationY, 0); // Випадковий поворот
+            scene.add(roof);
+        }
+
+        // Додаємо декілька будинків у випадкові місця
+        function generateHouses(count) {
+            for (let i = 0; i < count; i++) {
+                const x = (Math.random() - 0.5) * 50; // Випадкове положення по осі X
+                const z = (Math.random() - 0.5) * 50; // Випадкове положення по осі Z
+                const rotationY = Math.random() * Math.PI * 2; // Випадковий поворот навколо осі Oy
+                createHouse(x, z, rotationY);
+            }
+        }
+
+        // Генеруємо 10 будинків
+        generateHouses(10);
+
+        // Камера
+        camera.position.z = 50;
+
+        // Функція для анімації
+        function animate() {
+            requestAnimationFrame(animate);
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        // Додаємо можливість зміни розміру вікна
+        window.addEventListener('resize', () => {
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+        });
+    </script>
+</body>
+</html>
