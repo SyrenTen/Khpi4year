@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGL Landscape with Axes</title>
+    <style>
+        body, html { margin: 0; overflow: hidden; height: 100%; }
+        canvas { display: block; width: 100%; height: 100%; }
+    </style>
+</head>
+<body>
+    <canvas id="glCanvas"></canvas>
+
+    <!-- Ensure glMatrix is loaded first -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gl-matrix/2.8.1/gl-matrix-min.js"></script>
+
+    <!-- Main WebGL script -->
+    <script>
+        const vertexShaderSource = `
+        attribute vec4 aPosition;
+        attribute vec4 aColor;
+        uniform mat4 uModelViewMatrix;
+        uniform mat4 uProjectionMatrix;
+        varying lowp vec4 vColor;
+        void main(void) {
+            gl_Position = uProjectionMatrix * uModelViewMatrix * aPosition;
+            vColor = aColor;
+        }`;
+
+        const fragmentShaderSource = `
+        varying lowp vec4 vColor;
+        void main(void) {
+            gl_FragColor = vColor;
+        }`;
+
+        function initWebGL(canvas) {
+            const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+            if (!gl) {
+                alert("WebGL не підтримується!");
+                return null;
+            }
+            return gl;
+        }
+
+        function compileShader(gl, source, type) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error("Помилка компіляції шейдера:", gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+
+        function initShaders(gl) {
+            const vertexShader = compileShader(gl, vertexShaderSource, gl.VERTEX_SHADER);
+            const fragmentShader = compileShader(gl, fragmentShaderSource, gl.FRAGMENT_SHADER);
+
+            const shaderProgram = gl.createProgram();
+            gl.attachShader(shaderProgram, vertexShader);
+            gl.attachShader(shaderProgram, fragmentShader);
+            gl.linkProgram(shaderProgram);
+
+            if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+                console.error("Помилка ініціалізації шейдерної програми:", gl.getProgramInfoLog(shaderProgram));
+                return null;
+            }
+
+            gl.useProgram(shaderProgram);
+            return shaderProgram;
+        }
+
+        // Вершини для ландшафту
+        const landscapeVertices = new Float32Array([
+            -1,  0.2,  1,  0.0, 1.0, 0.0,  // Позиція (x, y, z) і колір (r, g, b)
+             0,  1.0,  1,  0.0, 1.0, 0.0,
+             0,  0.0,  0,  0.0, 1.0, 0.0,
+
+             0,  0.0,  0,  0.0, 1.0, 0.0,
+             1,  0.0,  1,  0.0, 1.0, 0.0,
+             1, -1.2,  0,  0.0, 1.0, 0.0
+        ]);
+
+        // Вершини для осей координат
+        const axisVertices = new Float32Array([
+            -2.0, 0.0, 0.0,  1.0, 0.0, 0.0,  // Початок осі X (червона)
+             2.0, 0.0, 0.0,  1.0, 0.0, 0.0,  // Кінець осі X
+
+            0.0, -2.0, 0.0,  0.0, 1.0, 0.0,  // Початок осі Y (зелена)
+            0.0,  2.0, 0.0,  0.0, 1.0, 0.0,  // Кінець осі Y
+
+            0.0, 0.0, -2.0,  0.0, 0.0, 1.0,  // Початок осі Z (синя)
+            0.0, 0.0,  2.0,  0.0, 0.0, 1.0   // Кінець осі Z
+        ]);
+
+        function createBuffer(gl, data) {
+            const buffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+            gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+            return buffer;
+        }
+
+        function drawScene(gl, programInfo, buffers, modelViewMatrix, projectionMatrix) {
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            gl.uniformMatrix4fv(programInfo.uniformLocations.projectionMatrix, false, projectionMatrix);
+            gl.uniformMatrix4fv(programInfo.uniformLocations.modelViewMatrix, false, modelViewMatrix);
+
+            // Ландшафт
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffers.landscape);
+            gl.vertexAttribPointer(programInfo.attribLocations.position, 3, gl.FLOAT, false, 24, 0);
+            gl.vertexAttribPointer(programInfo.attribLocations.color, 3, gl.FLOAT, false, 24, 12);
+            gl.enableVertexAttribArray(programInfo.attribLocations.position);
+            gl.enableVertexAttribArray(programInfo.attribLocations.color);
+            gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+            // Осі координат
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffers.axes);
+            gl.vertexAttribPointer(programInfo.attribLocations.position, 3, gl.FLOAT, false, 24, 0);
+            gl.vertexAttribPointer(programInfo.attribLocations.color, 3, gl.FLOAT, false, 24, 12);
+            gl.enableVertexAttribArray(programInfo.attribLocations.position);
+            gl.enableVertexAttribArray(programInfo.attribLocations.color);
+            gl.drawArrays(gl.LINES, 0, 6);
+        }
+
+        function initBuffers(gl) {
+            const landscapeBuffer = createBuffer(gl, landscapeVertices);
+            const axesBuffer = createBuffer(gl, axisVertices);
+            return {
+                landscape: landscapeBuffer,
+                axes: axesBuffer
+            };
+        }
+
+        function initMatrices() {
+            const modelViewMatrix = mat4.create();
+            const eye = [0.0, 2.0, 5.0];
+            const center = [0.0, 0.0, 0.0];
+            const up = [0.0, 1.0, 0.0];
+            mat4.lookAt(modelViewMatrix, eye, center, up);
+
+            const projectionMatrix = mat4.create();
+            mat4.perspective(projectionMatrix, 45 * Math.PI / 180, 1, 0.1, 100.0);
+
+            return {
+                modelViewMatrix: modelViewMatrix,
+                projectionMatrix: projectionMatrix
+            };
+        }
+
+        function initScene(gl, shaderProgram) {
+            const programInfo = {
+                program: shaderProgram,
+                attribLocations: {
+                    position: gl.getAttribLocation(shaderProgram, 'aPosition'),
+                    color: gl.getAttribLocation(shaderProgram, 'aColor'),
+                },
+                uniformLocations: {
+                    projectionMatrix: gl.getUniformLocation(shaderProgram, 'uProjectionMatrix'),
+                    modelViewMatrix: gl.getUniformLocation(shaderProgram, 'uModelViewMatrix'),
+                }
+            };
+
+            const buffers = initBuffers(gl);
+            const matrices = initMatrices();
+
+            function render() {
+                drawScene(gl, programInfo, buffers, matrices.modelViewMatrix, matrices.projectionMatrix);
+                requestAnimationFrame(render);
+            }
+            render();
+        }
+
+        function main() {
+            const canvas = document.getElementById('glCanvas');
+            const gl = initWebGL(canvas);
+            if (!gl) return;
+
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            gl.enable(gl.DEPTH_TEST);
+
+            const shaderProgram = initShaders(gl);
+            if (shaderProgram) {
+                initScene(gl, shaderProgram);
+            }
+        }
+
+        main();
+    </script>
+</body>
+</html>
