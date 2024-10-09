@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebGL Static Houses with drawElements()</title>
+    <style>
+        body, html { margin: 0; overflow: hidden; height: 100%; }
+        canvas { display: block; width: 100%; height: 100%; }
+    </style>
+</head>
+<body>
+    <canvas id="glCanvas"></canvas>
+
+    <!-- Підключаємо бібліотеку glMatrix -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/gl-matrix/2.8.1/gl-matrix-min.js"></script>
+
+    <script>
+        const vertexShaderSource = `
+        attribute vec4 aPosition;
+        attribute vec4 aColor;
+        uniform mat4 uModelViewMatrix;
+        uniform mat4 uProjectionMatrix;
+        varying lowp vec4 vColor;
+        void main(void) {
+            gl_Position = uProjectionMatrix * uModelViewMatrix * aPosition;
+            vColor = aColor;
+        }`;
+
+        const fragmentShaderSource = `
+        varying lowp vec4 vColor;
+        void main(void) {
+            gl_FragColor = vColor;
+        }`;
+
+        function initWebGL(canvas) {
+            const gl = canvas.getContext("webgl") || canvas.getContext("experimental-webgl");
+            if (!gl) {
+                alert("WebGL не підтримується!");
+                return null;
+            }
+            return gl;
+        }
+
+        function compileShader(gl, source, type) {
+            const shader = gl.createShader(type);
+            gl.shaderSource(shader, source);
+            gl.compileShader(shader);
+            if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+                console.error("Помилка компіляції шейдера:", gl.getShaderInfoLog(shader));
+                gl.deleteShader(shader);
+                return null;
+            }
+            return shader;
+        }
+
+        function initShaders(gl) {
+            const vertexShader = compileShader(gl, vertexShaderSource, gl.VERTEX_SHADER);
+            const fragmentShader = compileShader(gl, fragmentShaderSource, gl.FRAGMENT_SHADER);
+
+            const shaderProgram = gl.createProgram();
+            gl.attachShader(shaderProgram, vertexShader);
+            gl.attachShader(shaderProgram, fragmentShader);
+            gl.linkProgram(shaderProgram);
+
+            if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
+                console.error("Помилка ініціалізації шейдерної програми:", gl.getProgramInfoLog(shaderProgram));
+                return null;
+            }
+
+            gl.useProgram(shaderProgram);
+            return shaderProgram;
+        }
+
+        function createHouse(gl) {
+            const scale = 0.5; // Масштабний коефіцієнт для зменшення будинків
+
+            // Вершини будинку (тіло будинку та дах) зменшені
+            const vertices = new Float32Array([
+                // Тіло будинку - Куб (позиції + кольори)
+                scale * 1.0,  scale * 1.0, scale * -1.0,  1.0, 0.0, 0.0,  // Верхній правий
+                scale * -1.0,  scale * 1.0, scale * -1.0,  0.0, 1.0, 0.0,  // Верхній лівий
+                scale * -1.0, scale * -1.0, scale * -1.0,  0.0, 0.0, 1.0,  // Нижній лівий
+                scale * 1.0, scale * -1.0, scale * -1.0,  1.0, 1.0, 0.0,  // Нижній правий
+                scale * 1.0,  scale * 1.0,  scale * 1.0,  1.0, 0.0, 1.0,  // Верхній правий (передня грань)
+                scale * -1.0,  scale * 1.0,  scale * 1.0,  0.0, 1.0, 1.0,  // Верхній лівий (передня грань)
+                scale * -1.0, scale * -1.0,  scale * 1.0,  1.0, 1.0, 1.0,  // Нижній лівий (передня грань)
+                scale * 1.0, scale * -1.0,  scale * 1.0,  0.0, 0.0, 0.0,  // Нижній правий (передня грань)
+
+                // Дах - піраміда
+                scale * 0.0,  scale * 2.0,  scale * 0.0,  1.0, 0.5, 0.0,  // Вершина піраміди
+                scale * -1.0,  scale * 1.0, scale * -1.0,  0.6, 0.3, 0.1,  // Лівий задній
+                scale * 1.0,  scale * 1.0, scale * -1.0,  0.6, 0.3, 0.1,  // Правий задній
+                scale * 1.0,  scale * 1.0,  scale * 1.0,  0.6, 0.3, 0.1,  // Правий передній
+                scale * -1.0,  scale * 1.0,  scale * 1.0,  0.6, 0.3, 0.1   // Лівий передній
+            ]);
+
+            // Індекси для побудови будинку з вершин
+            const indices = new Uint16Array([
+                // Тіло будинку - Куб
+                0, 1, 2,  0, 2, 3,   // Задня грань
+                4, 5, 6,  4, 6, 7,   // Передня грань
+                0, 1, 5,  0, 5, 4,   // Верхня грань
+                2, 3, 7,  2, 7, 6,   // Нижня грань
+                1, 2, 6,  1, 6, 5,   // Ліва грань
+                0, 3, 7,  0, 7, 4,   // Права грань
+
+                // Дах
+                8, 9, 10,  // Задня грань даху
+                8, 10, 11, // Права грань даху
+                8, 11, 12, // Передня грань даху
+                8, 12, 9   // Ліва грань даху
+            ]);
+
+            // Створення та прив'язка буфера для вершин
+            const vertexBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ARRAY_BUFFER, vertexBuffer);
+            gl.bufferData(gl.ARRAY_BUFFER, vertices, gl.STATIC_DRAW);
+
+            // Створення та прив'язка буфера для індексів
+            const indexBuffer = gl.createBuffer();
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indexBuffer);
+            gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, indices, gl.STATIC_DRAW);
+
+            return {
+                vertex: vertexBuffer,
+                index: indexBuffer,
+                numIndices: indices.length
+            };
+        }
+
+        function drawHouse(gl, programInfo, buffers, modelViewMatrix, projectionMatrix) {
+            gl.uniformMatrix4fv(programInfo.uniformLocations.projectionMatrix, false, projectionMatrix);
+            gl.uniformMatrix4fv(programInfo.uniformLocations.modelViewMatrix, false, modelViewMatrix);
+
+            // Прив'язуємо буфер вершин
+            gl.bindBuffer(gl.ARRAY_BUFFER, buffers.vertex);
+            gl.vertexAttribPointer(programInfo.attribLocations.position, 3, gl.FLOAT, false, 24, 0);
+            gl.vertexAttribPointer(programInfo.attribLocations.color, 3, gl.FLOAT, false, 24, 12);
+            gl.enableVertexAttribArray(programInfo.attribLocations.position);
+            gl.enableVertexAttribArray(programInfo.attribLocations.color);
+
+            // Прив'язуємо індексний буфер
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffers.index);
+
+            // Викликаємо функцію для малювання через індекси
+            gl.drawElements(gl.TRIANGLES, buffers.numIndices, gl.UNSIGNED_SHORT, 0);
+        }
+
+        function drawScene(gl, programInfo, buffers, projectionMatrix, housesData) {
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
+            // Відображаємо всі будинки, використовуючи збережені дані про їх положення і поворот
+            for (let i = 0; i < housesData.length; i++) {
+                drawHouse(gl, programInfo, buffers, housesData[i].modelViewMatrix, projectionMatrix);
+            }
+        }
+
+        function generateHousesData(numHouses) {
+            const housesData = [];
+            for (let i = 0; i < numHouses; i++) {
+                const modelViewMatrix = mat4.create();
+                const x = (Math.random() - 0.5) * 20; // Випадкові X координати
+                const z = (Math.random() - 0.5) * 20; // Випадкові Z координати
+                const rotationY = Math.random() * Math.PI * 2; // Випадковий поворот навколо Oy
+
+                // Трансляція та обертання
+                mat4.translate(modelViewMatrix, modelViewMatrix, [x, 0.0, z]);
+                mat4.rotateY(modelViewMatrix, modelViewMatrix, rotationY);
+
+                housesData.push({ modelViewMatrix });
+            }
+            return housesData;
+        }
+
+        function initBuffers(gl) {
+            return createHouse(gl);
+        }
+
+        function initMatrices() {
+            const projectionMatrix = mat4.create();
+            mat4.perspective(projectionMatrix, 45 * Math.PI / 180, window.innerWidth / window.innerHeight, 0.1, 100.0);
+            return {
+                projectionMatrix: projectionMatrix
+            };
+        }
+
+        function initScene(gl, shaderProgram) {
+            const programInfo = {
+                program: shaderProgram,
+                attribLocations: {
+                    position: gl.getAttribLocation(shaderProgram, 'aPosition'),
+                    color: gl.getAttribLocation(shaderProgram, 'aColor'),
+                },
+                uniformLocations: {
+                    projectionMatrix: gl.getUniformLocation(shaderProgram, 'uProjectionMatrix'),
+                    modelViewMatrix: gl.getUniformLocation(shaderProgram, 'uModelViewMatrix'),
+                }
+            };
+
+            const buffers = initBuffers(gl);
+            const matrices = initMatrices();
+
+            // Генеруємо випадкові позиції і повороти для кожного будинку тільки один раз при завантаженні сторінки
+            const housesData = generateHousesData(10);
+
+            function render() {
+                drawScene(gl, programInfo, buffers, matrices.projectionMatrix, housesData);
+                requestAnimationFrame(render);
+            }
+            render();
+        }
+
+        function main() {
+            const canvas = document.getElementById('glCanvas');
+            const gl = initWebGL(canvas);
+            if (!gl) return;
+
+            gl.clearColor(0.0, 0.0, 0.0, 1.0);
+            gl.enable(gl.DEPTH_TEST);
+
+            const shaderProgram = initShaders(gl);
+            if (shaderProgram) {
+                initScene(gl, shaderProgram);
+            }
+
+            // Оновлюємо розмір вікна під час зміни його розміру
+            window.addEventListener('resize', () => {
+                gl.canvas.width = window.innerWidth;
+                gl.canvas.height = window.innerHeight;
+                gl.viewport(0, 0, gl.canvas.width, gl.canvas.height);
+            });
+        }
+
+        main();
+    </script>
+</body>
+</html>
