@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>A-Frame Scene with GLTF and Three.js</title>
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+</head>
+<body>
+<a-scene>
+    <!-- 5.1.1 Площина -->
+    <a-plane position="0 0 -4" rotation="-90 0 0" width="10" height="10" color="#7BC8A4"></a-plane>
+
+    <!-- 5.1.2 Три геометричні примітиви -->
+    <a-box position="-1 1 -3" rotation="0 45 0" color="#4CC3D9" depth="1" height="1" width="1"></a-box>
+    <a-sphere position="2 1.5 -5" radius="1.25" color="#EF2D5E"></a-sphere>
+    <a-cylinder position="0 1 -6" radius="0.5" height="1.5" color="#FFC65D"></a-cylinder>
+
+    <!-- 5.1.3 Модель з GLTF -->
+    <a-entity gltf-model="https://cdn.jsdelivr.net/gh/KhronosGroup/glTF-Sample-Models/2.0/Fox/glTF/Fox.gltf"
+              scale="0.2 0.2 0.2" position="1 0 -3">
+    </a-entity>
+
+    <!-- 5.1.4 Джерело світла -->
+    <a-light type="directional" position="2 4 3" intensity="1" color="#ffffff"></a-light>
+    <a-light type="ambient" color="#aaa"></a-light>
+
+    <!-- 5.1.5 Контейнер для Three.js -->
+    <a-entity id="threejs-entity" position="0 1 -2"></a-entity>
+</a-scene>
+
+<script>
+
+    const threeEntity = document.querySelector("#threejs-entity");
+    const threeScene = threeEntity.object3D;
+
+    const geometry = new THREE.TorusGeometry(0.5, 0.2, 16, 100);
+    const material = new THREE.MeshStandardMaterial({ color: 0xff0000 });
+    const torus = new THREE.Mesh(geometry, material);
+
+    threeScene.add(torus);
+
+    function animate() {
+        requestAnimationFrame(animate);
+        torus.rotation.x += 0.01;
+        torus.rotation.y += 0.01;
+    }
+    animate();
+</script>
+</body>
+</html>
